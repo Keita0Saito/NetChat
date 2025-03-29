@@ -54,12 +54,21 @@ pub async fn handle_client(
             continue;
         }
 
-        // Broadcast regular message
+        // Broadcast regular message, but skip sending it to the sender (self)
         let formatted = format!("{}: {}\n", user.nickname, msg);
         let mut connections = state.connections.lock().await;
-        broadcast(formatted.as_bytes(), &mut *connections).await;
+        
+        // Iterate through all connections, excluding the sender (writer)
+        for client in &*connections {
+            if Arc::ptr_eq(client, &writer) {
+                continue; // Skip the sender
+            }
+
+            // Send message to all other clients
+            let _ = client.lock().await.write_all(formatted.as_bytes()).await;
+        }
     }
 
     // Cleanup on disconnect
-state.users.remove_user(&user.token).await;
+    state.users.remove_user(&user.token).await;
 }
