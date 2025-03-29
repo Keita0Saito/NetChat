@@ -1,35 +1,65 @@
-use tokio::{net::tcp::OwnedReadHalf, io::AsyncReadExt};
+use super::{
+    clients::{AppState},
+    network::broadcast
+};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::tcp::OwnedReadHalf
+};
 use std::sync::Arc;
-use super::{clients::*, network::broadcast};
 
 const READ_BUFFER_SIZE: usize = 1024;
 
+// Handle client connection lifecycle
 pub async fn handle_client(
     mut reader: OwnedReadHalf,
-    writer: ClientWriter,
-    clients: ClientList,
+    writer: super::clients::ClientWriter,
+    state: Arc<AppState>,
 ) {
-    // Add client to list
+    // Register new user
+    let mut user = state.users.register_guest().await;
+    
+    // Add to active connections
     {
-        let mut connected_clients = clients.lock().await;
-        connected_clients.push(writer.clone());
+        let mut connections = state.connections.lock().await;
+        connections.push(writer.clone());
     }
 
-    // Read loop
-    let mut read_buffer = [0; READ_BUFFER_SIZE];
+    // Send welcome message
+    let _ = writer.lock().await.write_all(
+        format!("Welcome, {}! Your token: {}\n", user.nickname, user.token).as_bytes()
+    ).await;
+
+    let mut buffer = [0; READ_BUFFER_SIZE];
     loop {
-        let bytes_read = match reader.read(&mut read_buffer).await {
-            Ok(0) => break,  // Clean disconnect
+        // Read incoming data
+        let bytes_read = match reader.read(&mut buffer).await {
+            Ok(0) => break,  // Graceful disconnect
             Ok(n) => n,
-            Err(_) => break, // Error case
+            Err(_) => break,  // Network error
         };
 
-        let message_bytes = &read_buffer[..bytes_read];
-        let mut connected_clients = clients.lock().await;
-        broadcast(message_bytes, &mut connected_clients).await;
+        let msg = String::from_utf8_lossy(&buffer[..bytes_read]);
+        let msg = msg.trim();
+        
+        // Process /nick command
+        if msg.starts_with("/nick ") {
+            let new_nick = msg[6..].trim();
+            if let Some(updated) = state.users.change_nickname(&user.token, new_nick).await {
+                let notification = format!("{} changed name to {}\n", user.nickname, updated.nickname);
+                let mut connections = state.connections.lock().await;
+                broadcast(notification.as_bytes(), &mut *connections).await;
+                user = updated;
+            }
+            continue;
+        }
+
+        // Broadcast regular message
+        let formatted = format!("{}: {}\n", user.nickname, msg);
+        let mut connections = state.connections.lock().await;
+        broadcast(formatted.as_bytes(), &mut *connections).await;
     }
 
-    // Remove client on disconnect
-    let mut connected_clients = clients.lock().await;
-    connected_clients.retain(|client| !Arc::ptr_eq(client, &writer));
+    // Cleanup on disconnect
+state.users.remove_user(&user.token).await;
 }
