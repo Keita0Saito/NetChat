@@ -1,16 +1,23 @@
 mod user;
-pub use user::{UserManager};
+mod user_storage;
 
+pub use user::User;
+pub use user_storage::UserStorage;
+
+use tokio::sync::Mutex;
 use std::sync::Arc;
-use tokio::{
-    net::tcp::OwnedWriteHalf, 
-    sync::Mutex
-};
 
-pub type ClientWriter = Arc<Mutex<OwnedWriteHalf>>;
-pub type ClientList = Arc<Mutex<Vec<ClientWriter>>>;
-
+#[derive(Clone)]
 pub struct AppState {
-    pub connections: ClientList,
-    pub users: UserManager,
+    pub users: Arc<Mutex<UserStorage>>,
+    pub connections: Arc<Mutex<Vec<super::network::ClientWriter>>>,
+}
+
+impl AppState {
+    pub fn new() -> Self {
+        Self {
+            users: Arc::new(Mutex::new(UserStorage::new())),
+            connections: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
 }
