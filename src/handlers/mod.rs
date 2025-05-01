@@ -19,7 +19,7 @@ pub async fn handle_client(
     writer: ClientWriter,
     state: Arc<AppState>,
 ) {
-    let user = register_guest(&state).await;
+    let mut user = register_guest(&state).await;
     add_connection(&state, &writer).await;
     send_welcome(&writer, &user).await;
 
@@ -34,7 +34,7 @@ pub async fn handle_client(
         let msg = String::from_utf8_lossy(&buffer[..bytes_read]).trim().to_string();
         
         if let Some(cmd) = command_handling::parse_command(&msg) {
-            handle_command(cmd, &state, &user).await;
+            handle_command(cmd, &state, &mut user).await;
         } else {
             broadcast_message(&state, &user, &msg, &writer).await;
         }
