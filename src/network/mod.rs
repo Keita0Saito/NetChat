@@ -1,15 +1,16 @@
-use tokio::{
-    net::tcp::OwnedWriteHalf,
-    sync::Mutex,
-};
 use std::sync::Arc;
-use tokio::io::AsyncWriteExt; 
+use tokio::{io::AsyncWriteExt, net::tcp::OwnedWriteHalf, sync::Mutex};
 
-pub type ClientWriter = Arc<Mutex<OwnedWriteHalf>>;
+#[derive(Clone)]
+pub struct ClientConnection {
+    pub writer: Arc<Mutex<OwnedWriteHalf>>,
+    pub user_token: String,
+}
 
-pub async fn broadcast(msg: &str, connections: &mut Vec<ClientWriter>) {
-    for client in connections.iter_mut() {
-        let mut guard = client.lock().await;
-        let _ = guard.write_all(msg.as_bytes()).await;
+impl ClientConnection {
+    pub async fn send(&self, msg: &str) -> tokio::io::Result<()> {
+        let mut writer = self.writer.lock().await;
+        println!("Sending message to {}: {}", self.user_token, msg);
+        writer.write_all(msg.as_bytes()).await
     }
 }

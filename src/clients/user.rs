@@ -1,5 +1,5 @@
-use uuid::Uuid;
 use rand::Rng;
+use uuid::Uuid;
 
 #[derive(Clone, Debug)]
 pub struct User {

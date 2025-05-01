@@ -1,32 +1,23 @@
-use crate::{
-    clients::User,
-    network::ClientWriter,
-    clients::AppState
-};
+use crate::{clients::User, handlers::AppState, network::ClientConnection};
 use std::sync::Arc;
-use tokio::io::AsyncWriteExt;
 
-pub async fn send_welcome(writer: &ClientWriter, user: &User) {
-    let msg = format!("Welcome, {}! Your token: {}\n", user.nickname, user.token);
-    let mut guard = writer.lock().await;
-    if let Err(e) = guard.write_all(msg.as_bytes()).await {
-        eprintln!("Failed to send welcome message: {}", e);
-    }
+pub async fn send_welcome(writer: &ClientConnection, user: &User) {
+    let _ = writer.send(&format!("Welcome, {}!\n", user.nickname)).await;
 }
 
 pub async fn broadcast_message(
-    state: &Arc<AppState>,
-    user: &User,
-    message: &str,
-    sender: &ClientWriter,
+    state: &AppState,
+    sender: &User,
+    msg: &str,
+    _writer: &ClientConnection,
 ) {
-    let msg = format!("{}: {}\n", user.nickname, message);
-    let mut connections = state.connections.lock().await;
-    
-    for client in connections.iter_mut() {
-        if !Arc::ptr_eq(client, sender) {
-            let mut guard = client.lock().await;
-            let _ = guard.write_all(msg.as_bytes()).await;
+    let connections = state.connections.lock().await;
+    for conn in connections.iter() {
+        if conn.user_token != sender.token {
+            match conn.send(&format!("{}: {}\n", sender.nickname, msg)).await {
+                Ok(_) => println!("Message sent to {}", conn.user_token),
+                Err(e) => eprintln!("Failed to send message: {}", e),
+            }
         }
     }
 }

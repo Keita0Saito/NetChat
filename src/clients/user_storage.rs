@@ -32,8 +32,10 @@ impl UserStorage {
         self.users.remove(token);
     }
 
-    pub async fn find_by_nickname(&self, nickname: &str) -> Option<&User> {
-        let search_nick = nickname.to_lowercase();
-        self.users.values().find(|user| user.nickname.to_lowercase() == search_nick)
+    pub async fn find_by_nickname(&self, nickname: &str) -> Option<User> {
+        self.users
+            .values()
+            .find(|u| u.nickname == nickname)
+            .cloned()
     }
 }
