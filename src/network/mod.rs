@@ -8,9 +8,9 @@ pub struct ClientConnection {
 }
 
 impl ClientConnection {
+    /// Sends a UTF-8 encoded message to the connected client over TCP.
     pub async fn send(&self, msg: &str) -> tokio::io::Result<()> {
         let mut writer = self.writer.lock().await;
-        println!("Sending message to {}: {}", self.user_token, msg);
         writer.write_all(msg.as_bytes()).await
     }
 }
